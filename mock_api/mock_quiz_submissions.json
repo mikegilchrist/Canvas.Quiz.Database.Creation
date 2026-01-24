@@ -1,0 +1,19 @@
+[
+  {
+    "id": 11186198,
+    "user_id": 1234567890,
+    "quiz_id": 467113,
+    "started_at": null,
+    "finished_at": "Submitted Jan 23, 2025 at 6:58pm",
+    "time_spent": 32100,
+    "score": 83,
+    "quiz": {
+      "id": 467113,
+      "title": "S02: 2025-01-23 - Intro to Cancer and Genome Structure & Composition Results for John Smith"
+    },
+    "user": {
+      "id": 1234567890,
+      "name": "Smith, John"
+    }
+  }
+]

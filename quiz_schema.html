@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Canvas Quiz Archive - submission_id={{submission_id}}</title>
+  <style>
+    body { font-family: sans-serif; margin: 1.25rem; }
+    h1, h2, h3 { margin: 0.5rem 0; }
+    .muted { color: #555; }
+    .submission, .question { border: 1px solid #ccc; padding: 0.75rem; border-radius: 6px; margin: 0.75rem 0; }
+    dl { display: grid; grid-template-columns: 12rem 1fr; gap: 0.25rem 0.75rem; margin: 0; }
+    dt { font-weight: bold; }
+    dd { margin: 0; }
+    pre { white-space: pre-wrap; word-wrap: break-word; margin: 0.5rem 0 0 0; }
+    .field-label { font-weight: bold; margin-top: 0.5rem; }
+  </style>
+</head>
+
+<body>
+  <h1>Canvas Quiz Archive</h1>
+  <p class="muted">One file per quiz submission. Visible HTML below; full machine-readable JSON at end.</p>
+
+  <!-- Submission header (one per file) -->
+  <section class="submission"
+           submission_id="{{submission_id}}"
+           student_id="{{student_id}}"
+           quiz_id="{{quiz_id}}">
+    <h2>Submission</h2>
+    <dl>
+      <dt>submission_id</dt><dd>{{submission_id}}</dd>
+      <dt>student_id</dt><dd>{{student_id}}</dd>
+      <dt>quiz_id</dt><dd>{{quiz_id}}</dd>
+      <dt>quiz_name</dt><dd>{{quiz_name}}</dd>
+
+      <dt>time_start</dt><dd>{{time_start}}</dd>
+      <dt>time_end</dt><dd>{{time_end}}</dd>
+      <dt>time_total</dt><dd>{{time_total}}</dd>
+
+      <dt>points_total</dt><dd>{{points_total}}</dd>
+    </dl>
+  </section>
+
+  <!-- Questions (many per file) -->
+  <section class="questions">
+    <h2>Questions</h2>
+
+    <!-- Repeat this <article> for each question -->
+    <article class="question"
+             submission_id="{{submission_id}}"
+             student_id="{{student_id}}"
+             quiz_id="{{quiz_id}}"
+             question_id="{{question_id}}"
+             question_position="{{question_position}}"
+             question_type="{{question_type}}">
+      <h3>Question {{question_position}}</h3>
+
+      <dl>
+        <dt>submission_id</dt><dd>{{submission_id}}</dd>
+        <dt>student_id</dt><dd>{{student_id}}</dd>
+        <dt>quiz_id</dt><dd>{{quiz_id}}</dd>
+        <dt>question_id</dt><dd>{{question_id}}</dd>
+
+        <dt>question_position</dt><dd>{{question_position}}</dd>
+        <dt>question_type</dt><dd>{{question_type}}</dd>
+
+        <dt>points_possible</dt><dd>{{points_possible}}</dd>
+        <dt>points_earned</dt><dd>{{points_earned}}</dd>
+      </dl>
+
+      <div class="field-label">question_prompt</div>
+      <!-- Store as HTML if you have HTML; otherwise plain text. -->
+      <div class="question_prompt">{{question_prompt}}</div>
+
+      <div class="field-label">question_response</div>
+      <!-- Store raw response JSON or normalized text (or both). -->
+      <pre class="question_response">{{question_response}}</pre>
+
+      <div class="field-label">question_key</div>
+      <!-- Your "general_fb" equivalent: neutral feedback text (often HTML). -->
+      <div class="question_key">{{question_key}}</div>
+    </article>
+    <!-- End repeat -->
+
+  </section>
+
+  <!-- Machine-readable JSON for SQLite import -->
+  <script type="application/json" id="canvas_quiz_archive">
+{
+  "submission": {
+    "submission_id": "{{submission_id}}",
+    "student_id": "{{student_id}}",
+    "quiz_id": "{{quiz_id}}",
+    "quiz_name": "{{quiz_name}}",
+    "time_start": "{{time_start}}",
+    "time_end": "{{time_end}}",
+    "time_total": {{time_total}},
+    "points_total": {{points_total}}
+  },
+  "questions": [
+    {
+      "submission_id": "{{submission_id}}",
+      "student_id": "{{student_id}}",
+      "quiz_id": "{{quiz_id}}",
+      "question_id": "{{question_id}}",
+      "question_position": {{question_position}},
+      "question_type": "{{question_type}}",
+      "question_prompt": "{{question_prompt}}",
+      "question_response": {{question_response_json}},
+      "question_key": "{{question_key}}",
+      "points_possible": {{points_possible}},
+      "points_earned": {{points_earned}}
+    }
+    /* repeat objects, separated by commas */
+  ]
+}
+  </script>
+</body>
+</html>
