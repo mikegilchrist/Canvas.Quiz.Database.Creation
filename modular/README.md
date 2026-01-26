@@ -16,3 +16,7 @@ Notes on newlines
 - Canvas web UI often collapses whitespace when rendering HTML, so underlying exported HTML or API text may contain newlines that are not visually obvious.
 - JSON preserves newline characters by escaping them as \n inside JSON strings. This is normal and preserves meaning.
 - We treat canonical JSON as the authoritative record, and only apply readability cleanup when rendering HTML.
+
+## Usage
+
+> python3 src/api_to_json.py $COURSEID  $QUIZID   --base-url https://utk.instructure.com   --token-file ~/.canvas_token   --outdir output/JSON   --verbose

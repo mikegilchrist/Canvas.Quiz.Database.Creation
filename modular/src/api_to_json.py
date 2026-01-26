@@ -12,6 +12,7 @@
 
 import argparse
 import os
+import urllib.error
 
 from canvas_api import get_quiz_questions, get_quiz_submissions, get_submission_questions
 from io_utils import write_json
@@ -47,8 +48,16 @@ def main():
 
     if args.verbose:
         print("[INFO] Fetching quiz questions...")
-    quiz_questions = get_quiz_questions(base_url, token, args.course_id, args.quiz_id, verbose=args.verbose)
-
+        try:
+            quiz_questions = get_quiz_questions(base_url, token, args.course_id, args.quiz_id, verbose=args.verbose)
+        except urllib.error.HTTPError as e:
+            # UTK appears to return 403 for /quizzes/:id/questions even for instructors.
+            if e.code == 403:
+                quiz_questions = []
+                if args.verbose:
+                    print("[WARN] 403 on quiz questions endpoint; continuing without question_prompt_html/question_key_html.")
+                else:
+                    raise
     if args.verbose:
         print("[INFO] Fetching quiz submissions...")
     submissions = get_quiz_submissions(base_url, token, args.course_id, args.quiz_id, verbose=args.verbose)
