@@ -17,6 +17,11 @@ Notes on newlines
 - JSON preserves newline characters by escaping them as \n inside JSON strings. This is normal and preserves meaning.
 - We treat canonical JSON as the authoritative record, and only apply readability cleanup when rendering HTML.
 
+API note
+- /courses/:course_id/quizzes/:quiz_id/submissions often returns an object with key "quiz_submissions" rather than a bare list; the code extracts that list before pagination.
+
+Known limitation (UTK)
+- /courses/:course_id/quizzes/:quiz_id/questions returns 403 (unauthorized) even for instructors; downloader continues without question prompts/keys.
 ## Usage
 
 > python3 src/api_to_json.py $COURSEID  $QUIZID   --base-url https://utk.instructure.com   --token-file ~/.canvas_token   --outdir output/JSON   --verbose

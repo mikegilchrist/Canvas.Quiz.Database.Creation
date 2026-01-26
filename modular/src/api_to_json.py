@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
 # Date: 2026-01-25
-# Version: 1.0.0
+# Version: 1.0.2
 # Purpose: Fetch Classic Quiz data via Canvas API and write canonical per-submission JSON files.
 # Usage: api_to_json.py COURSE_ID QUIZ_ID --base-url URL --token-file FILE [--outdir DIR] [--dry-run] [--verbose]
 # Input: Canvas API token + course_id + quiz_id.
@@ -48,16 +48,17 @@ def main():
 
     if args.verbose:
         print("[INFO] Fetching quiz questions...")
-        try:
-            quiz_questions = get_quiz_questions(base_url, token, args.course_id, args.quiz_id, verbose=args.verbose)
-        except urllib.error.HTTPError as e:
-            # UTK appears to return 403 for /quizzes/:id/questions even for instructors.
-            if e.code == 403:
-                quiz_questions = []
-                if args.verbose:
-                    print("[WARN] 403 on quiz questions endpoint; continuing without question_prompt_html/question_key_html.")
-                else:
-                    raise
+    try:
+        quiz_questions = get_quiz_questions(base_url, token, args.course_id, args.quiz_id, verbose=args.verbose)
+    except urllib.error.HTTPError as e:
+        # UTK returns 403 for /quizzes/:id/questions even for instructors.
+        if e.code == 403:
+            quiz_questions = []
+            if args.verbose:
+                print("[WARN] 403 on quiz questions endpoint; continuing without question_prompt_html/question_key_html.")
+        else:
+            raise
+
     if args.verbose:
         print("[INFO] Fetching quiz submissions...")
     submissions = get_quiz_submissions(base_url, token, args.course_id, args.quiz_id, verbose=args.verbose)

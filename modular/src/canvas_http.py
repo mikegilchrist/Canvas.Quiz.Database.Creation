@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
 # Date: 2026-01-25
-# Version: 1.0.0
+# Version: 1.0.1
 # Purpose: HTTP helpers for Canvas API requests, including pagination.
 # Usage: Imported by other modules.
 # Input: Canvas base URL and token; endpoint URL.
@@ -35,6 +35,25 @@ def parse_next_link(headers):
             if lt >= 0 and gt > lt:
                 return p[lt + 1:gt]
     return None
+
+
+def paginated_get_all_list_key(url, token, list_key, verbose=False):
+    out = []
+    cur = url
+    while cur:
+        if verbose:
+            print(f"[GET] {cur}")
+        data, headers = http_get_json(cur, token)
+
+        if isinstance(data, dict) and list_key in data and isinstance(data[list_key], list):
+            out.extend(data[list_key])
+        elif isinstance(data, list):
+            out.extend(data)
+        else:
+            out.append(data)
+
+        cur = parse_next_link(headers)
+    return out
 
 
 def paginated_get_all(url, token, verbose=False):
