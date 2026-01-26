@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
 # Date: 2026-01-23
-# Version: 1.0.1
+# Version: 1.0.2
 # Purpose: Export Canvas Classic Quiz submissions (per student) to HTML+JSON and SQLite. Supports offline mode using mock JSON.
 # Usage: canvas_quiz_archive.py COURSE_ID QUIZ_ID OUTDIR OUTDB
 #        canvas_quiz_archive.py COURSE_ID QUIZ_ID OUTDIR OUTDB --base-url URL --token TOKEN
@@ -94,6 +94,24 @@ def sanitize_filename(s):
 
 def now_utc_iso():
     return dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def normalize_single_newlines(s):
+    # Replace single newlines with spaces, keep multiple newlines.
+    if s is None:
+        return None
+    s = str(s).replace("\r\n", "\n").replace("\r", "\n")
+
+    marker = "__KEEP_MULTILINE_BREAK__"
+    while "\n\n" in s:
+        s = s.replace("\n\n", marker)
+
+    s = s.replace("\n", " ")
+
+    while marker in s:
+        s = s.replace(marker, "\n\n")
+
+    return s
 
 
 def init_db(db_path):
@@ -195,7 +213,8 @@ def insert_question_record(conn, q):
 
 def build_html(submission, questions):
     def esc(x):
-        return html.escape("" if x is None else str(x))
+        x2 = normalize_single_newlines(x)
+        return html.escape("" if x2 is None else str(x2))
 
     q_blocks = []
     for q in questions:
@@ -227,7 +246,7 @@ def build_html(submission, questions):
       <div class="question_prompt">{esc(q.get("question_prompt"))}</div>
 
       <div class="field-label">question_response</div>
-      <pre class="question_response">{html.escape(json.dumps(q.get("question_response"), ensure_ascii=True, indent=2))}</pre>
+      <pre class="question_response">{html.escape(normalize_single_newlines(json.dumps(q.get("question_response"), ensure_ascii=True, indent=2)))}</pre>
 
       <div class="field-label">question_key</div>
       <div class="question_key">{esc(q.get("question_key"))}</div>
@@ -388,7 +407,6 @@ def main():
     else:
         if not args.mock_dir:
             die("--mock-dir is required with --offline")
-        # Determine submission_id from the mock submissions file (first element)
         subs = load_json(os.path.join(args.mock_dir, "mock_quiz_submissions.json"))
         if not subs:
             die("mock_quiz_submissions.json is empty")
@@ -448,9 +466,6 @@ def main():
 
             meta = q_lookup.get(qid, {})
 
-            # In offline mocks, we stored:
-            #   answer = {"format":"html_fragment","value":"..."}
-            # plus optionally earned_points/points_possible
             question_response = sq.get("answer")
             points_earned = sq.get("earned_points")
 
