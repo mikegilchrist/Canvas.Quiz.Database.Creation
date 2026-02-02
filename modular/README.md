@@ -3,9 +3,9 @@ Canvas Quiz Archive - Modular Offline/Online Pipeline
 Folders
 - ./src            Python modules + CLI entrypoints
 - ./data           Input data (mock JSON, exported HTML, etc.)
-- ./output/JSON    Canonical per-submission JSON files
-- ./output/HTML    Rendered per-submission HTML files
-- ./output/SQLITE  SQLite databases
+- ./data/JSON    Canonical per-submission JSON files
+- ./data/HTML    Rendered per-submission HTML files
+- ./data/SQLITE  SQLite databases
 
 Pipeline
 1) API -> JSON     (src/api_to_json.py)   or Offline mocks -> JSON (src/mock_to_json.py)
