@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
-# Date: 2026-01-25
-# Version: 1.0.2
+# Date: 2026-02-19
+# Version: 1.0.3
 # Purpose: Fetch Classic Quiz data via Canvas API and write canonical per-submission JSON files.
 # Usage: api_to_json.py COURSE_ID QUIZ_ID --base-url URL --token-file FILE [--outdir DIR] [--dry-run] [--verbose]
 # Input: Canvas API token + course_id + quiz_id.
@@ -15,17 +15,8 @@ import os
 import urllib.error
 
 from canvas_api import get_quiz_questions, get_quiz_submissions, get_submission_questions
-from io_utils import write_json
+from io_utils import read_token, write_json
 from model import canonicalize_submission
-
-
-def read_token(token, token_file):
-    if token:
-        return token.strip()
-    if token_file:
-        with open(token_file, "r", encoding="utf-8") as f:
-            return f.read().strip()
-    raise ValueError("No token provided. Use --token or --token-file.")
 
 
 def main():

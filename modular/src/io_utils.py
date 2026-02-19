@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
-# Date: 2026-01-25
-# Version: 1.0.0
+# Date: 2026-02-19
+# Version: 1.1.0
 # Purpose: Small IO helpers for reading/writing JSON files and selecting inputs.
 # Usage: Imported by CLI scripts.
 # Input: Paths.
@@ -31,3 +31,15 @@ def list_json_files(folder):
         if name.lower().endswith(".json"):
             out.append(os.path.join(folder, name))
     return out
+
+
+def read_token(token, token_file):
+    """Return a Canvas API token from an inline string or a file path.
+    Raises ValueError if neither source is provided.
+    """
+    if token:
+        return token.strip()
+    if token_file:
+        with open(token_file, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    raise ValueError("No token provided. Use --token or --token-file.")

@@ -3,3 +3,4 @@ __pycache__
 submission_*.json
 tmp.*
 tmp/
+output/

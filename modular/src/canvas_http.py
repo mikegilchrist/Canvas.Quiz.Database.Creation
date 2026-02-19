@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
-# Date: 2026-01-25
-# Version: 1.0.1
+# Date: 2026-02-19
+# Version: 1.1.0
 # Purpose: HTTP helpers for Canvas API requests, including pagination.
 # Usage: Imported by other modules.
 # Input: Canvas base URL and token; endpoint URL.
@@ -54,6 +54,31 @@ def paginated_get_all_list_key(url, token, list_key, verbose=False):
 
         cur = parse_next_link(headers)
     return out
+
+
+def http_post_json(url, token, body):
+    """POST JSON to a Canvas API endpoint with Bearer auth.
+    Returns (parsed_json, headers).
+    """
+    payload = json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, method="POST")
+    req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Accept", "application/json")
+    with urllib.request.urlopen(req) as resp:
+        raw = resp.read().decode("utf-8")
+        return json.loads(raw), resp.headers
+
+
+def http_get_raw(url):
+    """GET a URL without auth headers.  Returns raw bytes.
+    Used for downloading files whose URL contains a verifier token
+    (e.g. Canvas report CSV downloads where sending a Bearer header
+    alongside the verifier causes authentication to fail).
+    """
+    req = urllib.request.Request(url)
+    with urllib.request.urlopen(req) as resp:
+        return resp.read()
 
 
 def paginated_get_all(url, token, verbose=False):
