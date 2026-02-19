@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
 # Date: 2026-02-19
-# Version: 1.1.0
+# Version: 1.2.0
 # Purpose: Minimal Canvas API endpoint wrappers used for Classic Quiz response extraction.
 # Usage: Imported by api_to_json.py.
 # Input: Canvas base URL, token, course_id, quiz_id, submission_id.
@@ -16,6 +16,12 @@ from canvas_http import (
     paginated_get_all,
     paginated_get_all_list_key,
 )
+
+
+def get_quizzes(base_url, token, course_id, verbose=False):
+    """GET all quizzes in a course."""
+    url = f"{base_url}/api/v1/courses/{course_id}/quizzes?per_page=100"
+    return paginated_get_all(url, token, verbose=verbose)
 
 
 def get_quiz(base_url, token, course_id, quiz_id, verbose=False):
