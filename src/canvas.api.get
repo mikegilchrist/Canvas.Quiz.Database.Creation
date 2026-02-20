@@ -1,23 +1,21 @@
 #!/usr/bin/env bash
 # ============================================================================
 # Script:       canvas.api.get
-# Version:      1.0.0
+# Version:      2.0.0
 # Date:         2026-02-20
 # Purpose:      Unified wrapper for canvas.api download/export scripts.
 #
 # Usage:        canvas.api.get COURSE_ID discussions [TOPIC_ID] [OPTIONS]
 #               canvas.api.get COURSE_ID assignments [ASSIGNMENT_ID] [OPTIONS]
-#               canvas.api.get COURSE_ID quizzes [QUIZ_ID] [OPTIONS]
-#                 (QUIZ_ID optional -- omit to export all quizzes)
-#               canvas.api.get COURSE_ID csv [QUIZ_ID] [OPTIONS]
+#               canvas.api.get COURSE_ID quizzes [QUIZ_ID] [--format FORMAT] [OPTIONS]
 #
 # Nouns:
 #   discussions   Download discussion threads to JSON
 #   assignments   Download assignment submissions (files, rubric, comments)
-#   quizzes       Export quiz submissions to canonical JSON
-#   csv           Download quiz Student/Item Analysis CSV reports
+#   quizzes       Export quiz data (--format csv|json|summary, default: csv)
 #
-# Options:      All options are passed through to the underlying script.
+# Options:      --format csv|json|summary  Output format for quizzes (default: csv)
+#               All other options are passed through to the underlying script.
 #               Use --help after the noun to see script-specific options.
 #
 # Session:      Canvas.API
@@ -34,14 +32,17 @@ usage() {
     cat <<'EOF'
 Usage: canvas.api.get COURSE_ID discussions [TOPIC_ID] [OPTIONS]
        canvas.api.get COURSE_ID assignments [ASSIGNMENT_ID] [OPTIONS]
-       canvas.api.get COURSE_ID quizzes [QUIZ_ID] [OPTIONS]
-       canvas.api.get COURSE_ID csv [QUIZ_ID] [OPTIONS]
+       canvas.api.get COURSE_ID quizzes [QUIZ_ID] [--format FORMAT] [OPTIONS]
 
 Nouns:
   discussions   Download discussion threads to JSON
   assignments   Download assignment submissions (files, rubric, comments)
-  quizzes       Export quiz submissions to canonical JSON
-  csv           Download quiz Student/Item Analysis CSV reports
+  quizzes       Export quiz data (--format csv|json|summary, default: csv)
+
+Options:
+  --format csv      Download quiz Student/Item Analysis CSV reports (default)
+  --format json     Export quiz submissions to canonical JSON
+  --format summary  Per-student summary with time, word count, wpm
 
 All additional options are passed through to the underlying script.
 Use "canvas.api.get COURSE_ID NOUN --help" to see script-specific options.
@@ -61,6 +62,33 @@ course_id="$1"
 noun="$2"
 shift 2
 
+# Extract --format from remaining args (for quizzes noun)
+format=""
+passthrough=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --format)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --format requires a value (csv, json, or summary)." >&2
+                exit 1
+            fi
+            format="$2"
+            shift 2
+            ;;
+        --format=*)
+            format="${1#--format=}"
+            shift
+            ;;
+        *)
+            passthrough+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# Restore passthrough args
+set -- "${passthrough[@]+"${passthrough[@]}"}"
+
 case "$noun" in
     discussions)
         exec python3 "$SCRIPT_DIR/canvas.api.discussions_to_json.py" "$course_id" "$@"
@@ -69,17 +97,30 @@ case "$noun" in
         exec python3 "$SCRIPT_DIR/canvas.api.submissions_to_files.py" "$course_id" "$@"
         ;;
     quizzes)
-        exec python3 "$SCRIPT_DIR/canvas.api.to_json.py" "$course_id" "$@"
-        ;;
-    csv)
-        exec python3 "$SCRIPT_DIR/canvas.api.report_to_csv.py" "$course_id" "$@"
+        # Default format is csv
+        format="${format:-csv}"
+        case "$format" in
+            json)
+                exec python3 "$SCRIPT_DIR/canvas.api.to_json.py" "$course_id" "$@"
+                ;;
+            csv)
+                exec python3 "$SCRIPT_DIR/canvas.api.report_to_csv.py" "$course_id" "$@"
+                ;;
+            summary)
+                exec python3 "$SCRIPT_DIR/canvas.api.quiz_summary.py" "$course_id" "$@"
+                ;;
+            *)
+                echo "Error: Unknown format '$format'. Valid formats: csv, json, summary" >&2
+                exit 1
+                ;;
+        esac
         ;;
     -h|--help)
         usage 0
         ;;
     *)
         echo "Error: Unknown noun '$noun'." >&2
-        echo "Valid nouns: discussions, assignments, quizzes, csv" >&2
+        echo "Valid nouns: discussions, assignments, quizzes" >&2
         exit 1
         ;;
 esac
