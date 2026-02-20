@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # ============================================================================
 # Script:       report_to_csv.py
-# Version:      1.2.0
-# Date:         2026-02-19
-# Purpose:      Download a Canvas Quiz Report (Student Analysis or Item
-#               Analysis) as a CSV file via the Quiz Reports API.
+# Version:      2.0.0
+# Date:         2026-02-20
+# Purpose:      Download Canvas Quiz Report CSVs (Student Analysis or Item
+#               Analysis) for one quiz or all quizzes in a course.
 #
 # The Canvas Quiz Reports API is asynchronous:
 #   1. POST to trigger report generation
@@ -12,14 +12,16 @@
 #   3. Fetch the report object to get the download URL
 #   4. Download the CSV (no Authorization header -- verifier in URL)
 #
-# Usage:        report_to_csv.py COURSE_ID QUIZ_ID --base-url URL
+# Usage:        report_to_csv.py COURSE_ID [QUIZ_ID] --base-url URL
 #                   [--token TOKEN | --token-file FILE]
 #                   [--outdir DIR] [--report-type TYPE]
 #                   [--all-versions] [--poll-interval SEC]
+#                   [--keep-newlines] [--anonymize]
+#                   [--update] [--include-surveys]
 #                   [--dry-run] [--verbose] [--help]
 #
-# Input:        Canvas API token + course_id + quiz_id
-# Output:       CSV file in --outdir (default: output/CSV)
+# Input:        Canvas API token + course_id (+ optional quiz_id)
+# Output:       CSV file(s) in --outdir (default: output/CSV)
 #
 # Options:
 #   --base-url URL          Canvas instance URL (required)
@@ -29,7 +31,10 @@
 #   --report-type TYPE      student_analysis (default) or item_analysis
 #   --all-versions          Include all submission attempts, not just latest
 #   --poll-interval SEC     Seconds between progress polls (default: 5)
+#   --keep-newlines         Keep embedded newlines in CSV fields
 #   --anonymize             Replace student PII with anonymous identifiers
+#   -u, --update            Skip quizzes whose CSV already exists in outdir
+#   --include-surveys       Also process survey-type quizzes (batch mode)
 #   -n, --dry-run           Show what would be done without making changes
 #   -v, --verbose           Show detailed output
 #   -h, --help              Show this help message
@@ -45,16 +50,25 @@
 # ============================================================================
 
 import argparse
+import glob
 import os
 import re
 import sys
 import time
 import urllib.error
 
-from canvas_api import create_quiz_report, get_progress, get_quiz, get_quiz_report
+from canvas_api import (
+    create_quiz_report,
+    get_progress,
+    get_quiz,
+    get_quiz_report,
+    get_quizzes,
+)
 from canvas_http import http_get_raw
 from io_utils import read_token
 
+
+# ---- Filename helpers ----
 
 def sanitize_for_filename(text, max_len=50):
     """Turn a quiz title into a filesystem-safe slug.
@@ -86,6 +100,49 @@ def sanitize_for_filename(text, max_len=50):
     return text
 
 
+def build_filename(quiz_slug, report_type, course_id, quiz_id, anonymize):
+    """Build the output CSV filename.
+
+    Pattern: {quiz_slug}_{report.type}_{course}-{quiz}_{date}.csv
+    When anonymize is True, course/quiz IDs are omitted.
+    """
+    today = time.strftime("%Y-%m-%d")
+    report_label = report_type.replace("_", ".")
+    if anonymize:
+        ids_label = ""
+    else:
+        ids_label = f"_{course_id}-{quiz_id}"
+    if quiz_slug:
+        return f"{quiz_slug}_{report_label}{ids_label}_{today}.csv"
+    else:
+        return f"{report_label}{ids_label}_{today}.csv"
+
+
+def file_already_exists(outdir, quiz_slug, report_type, course_id, quiz_id,
+                        anonymize):
+    """Check whether a CSV for this quiz already exists in outdir.
+
+    Matches on the slug and quiz ID prefix, ignoring date, so an older
+    download counts as existing.  Returns the path if found, else None.
+    """
+    if not os.path.isdir(outdir):
+        return None
+    # Build a glob pattern: slug + report_type + ids (any date)
+    report_label = report_type.replace("_", ".")
+    if anonymize:
+        ids_part = ""
+    else:
+        ids_part = f"_{course_id}-{quiz_id}"
+    if quiz_slug:
+        pattern = f"{quiz_slug}_{report_label}{ids_part}_*.csv"
+    else:
+        pattern = f"{report_label}{ids_part}_*.csv"
+    matches = glob.glob(os.path.join(outdir, pattern))
+    return matches[0] if matches else None
+
+
+# ---- CSV post-processing ----
+
 def flatten_newlines_in_csv(csv_bytes):
     """Replace embedded newlines inside quoted CSV fields with spaces.
     This makes the CSV easier to work with in tools that don't fully
@@ -102,7 +159,6 @@ def flatten_newlines_in_csv(csv_bytes):
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
     for row in rows:
-        # Replace newlines within each cell with a space
         cleaned = [cell.replace("\n", " ").replace("\r", " ") for cell in row]
         writer.writerow(cleaned)
 
@@ -110,8 +166,6 @@ def flatten_newlines_in_csv(csv_bytes):
 
 
 # Columns containing personally identifiable information.
-# Canvas Student Analysis CSV layout: name, id, sis_id, section,
-# section_id, section_sis_id, submitted, <question cols...>
 _PII_COLUMNS = {"name", "id", "sis_id", "section", "section_id",
                 "section_sis_id"}
 
@@ -134,7 +188,6 @@ def anonymize_csv(csv_bytes):
 
     header = rows[0]
 
-    # Map column index -> column name for PII columns
     pii_indices = {i: h for i, h in enumerate(header) if h in _PII_COLUMNS}
     name_col = None
     for i, h in enumerate(header):
@@ -143,7 +196,6 @@ def anonymize_csv(csv_bytes):
             break
 
     # Replace Canvas question IDs in headers with sequential Q1, Q2, ...
-    # Headers look like "7252969: The readings mention..."
     q_num = 0
     for i, h in enumerate(header):
         m = re.match(r'^\d+:\s*', h)
@@ -170,10 +222,10 @@ def anonymize_csv(csv_bytes):
     return out.getvalue().encode("utf-8")
 
 
+# ---- Report download core ----
+
 def extract_progress_id(progress_url):
-    """Pull the numeric progress id from a Canvas progress URL.
-    Example: "https://canvas.example.com/api/v1/progress/12345" -> 12345
-    """
+    """Pull the numeric progress id from a Canvas progress URL."""
     match = re.search(r"/progress/(\d+)", progress_url)
     if match:
         return int(match.group(1))
@@ -191,7 +243,7 @@ def poll_until_complete(base_url, token, progress_id,
         completion = prog.get("completion", 0)
 
         if verbose:
-            print(f"[INFO] Progress {progress_id}: "
+            print(f"  [INFO] Progress {progress_id}: "
                   f"state={state}, completion={completion}%")
 
         if state == "completed":
@@ -204,29 +256,121 @@ def poll_until_complete(base_url, token, progress_id,
         time.sleep(poll_interval)
 
 
+def download_one_report(base_url, token, course_id, quiz_id, quiz_title,
+                        report_type, includes_all_versions, poll_interval,
+                        keep_newlines, anonymize, outdir, update, verbose):
+    """Download a single quiz report CSV.  Returns (outpath, error_msg).
+    On success error_msg is None; on failure outpath is None.
+    """
+    quiz_slug = sanitize_for_filename(quiz_title) if quiz_title else ""
+
+    # --update: skip if a file for this quiz already exists
+    if update:
+        existing = file_already_exists(outdir, quiz_slug, report_type,
+                                       course_id, quiz_id, anonymize)
+        if existing:
+            return existing, "skip"
+
+    try:
+        # Step 1: Trigger report
+        if verbose:
+            print(f"  [INFO] Triggering {report_type} report...")
+        try:
+            report = create_quiz_report(
+                base_url, token, course_id, quiz_id,
+                report_type=report_type,
+                includes_all_versions=includes_all_versions,
+                verbose=verbose)
+        except urllib.error.HTTPError as e:
+            if e.code == 409:
+                if verbose:
+                    print("  [WARN] Report already generating, retrying...")
+                report = create_quiz_report(
+                    base_url, token, course_id, quiz_id,
+                    report_type=report_type,
+                    includes_all_versions=includes_all_versions,
+                    verbose=verbose)
+            else:
+                raise
+
+        report_id = report.get("id")
+        if report_id is None:
+            return None, "No report id in API response"
+
+        # Step 2: Poll progress
+        progress_url = report.get("progress_url")
+        file_obj = report.get("file")
+
+        if file_obj and file_obj.get("url"):
+            if verbose:
+                print("  [INFO] Report already cached.")
+        elif progress_url:
+            progress_id = extract_progress_id(progress_url)
+            if verbose:
+                print(f"  [INFO] Polling progress {progress_id}...")
+            poll_until_complete(base_url, token, progress_id,
+                                poll_interval=poll_interval,
+                                verbose=verbose)
+            report = get_quiz_report(base_url, token, course_id,
+                                     quiz_id, report_id, verbose=verbose)
+            file_obj = report.get("file")
+        else:
+            return None, "No progress_url or file in response"
+
+        if not file_obj or not file_obj.get("url"):
+            return None, "Report completed but no file URL"
+
+        # Step 3: Download CSV
+        csv_bytes = http_get_raw(file_obj["url"])
+
+        # Step 4: Post-process
+        if not keep_newlines:
+            csv_bytes = flatten_newlines_in_csv(csv_bytes)
+        if anonymize:
+            csv_bytes = anonymize_csv(csv_bytes)
+
+        # Step 5: Write file
+        filename = build_filename(quiz_slug, report_type, course_id,
+                                  quiz_id, anonymize)
+        os.makedirs(outdir, exist_ok=True)
+        outpath = os.path.join(outdir, filename)
+        with open(outpath, "wb") as f:
+            f.write(csv_bytes)
+
+        return outpath, None
+
+    except Exception as e:
+        return None, str(e)
+
+
+# ---- CLI ----
+
 def main():
     ap = argparse.ArgumentParser(
-        description="Download a Canvas Quiz Report (Student Analysis / "
-                    "Item Analysis) as a CSV file.")
+        description="Download Canvas Quiz Report CSVs (Student Analysis / "
+                    "Item Analysis).  Pass a QUIZ_ID for a single quiz, or "
+                    "omit it to download all published quizzes in the course.")
     ap.add_argument("course_id", type=int,
                     help="Canvas course ID")
-    ap.add_argument("quiz_id", type=int,
-                    help="Canvas quiz ID")
+    ap.add_argument("quiz_id", nargs="?", type=int, default=None,
+                    help="Canvas quiz ID (omit to download all quizzes)")
 
     ap.add_argument("--base-url", required=True,
-                    help="Canvas instance URL (e.g. https://utk.instructure.com)")
+                    help="Canvas instance URL "
+                         "(e.g. https://utk.instructure.com)")
     ap.add_argument("--token", default=None,
                     help="Canvas API token (inline)")
     ap.add_argument("--token-file", default=None,
                     help="Path to file containing Canvas API token")
 
     ap.add_argument("--outdir", default=os.path.join("output", "CSV"),
-                    help="Output directory for the CSV (default: output/CSV)")
+                    help="Output directory for CSVs (default: output/CSV)")
     ap.add_argument("--report-type", default="student_analysis",
                     choices=["student_analysis", "item_analysis"],
                     help="Report type (default: student_analysis)")
     ap.add_argument("--all-versions", action="store_true",
-                    help="Include all submission attempts, not just the latest")
+                    help="Include all submission attempts, not just the "
+                         "latest")
     ap.add_argument("--poll-interval", type=int, default=5,
                     help="Seconds between progress polls (default: 5)")
 
@@ -236,6 +380,11 @@ def main():
     ap.add_argument("--anonymize", action="store_true",
                     help="Replace student PII (name, id, sis_id, section "
                          "columns) with anonymous identifiers")
+    ap.add_argument("-u", "--update", action="store_true",
+                    help="Skip quizzes whose CSV already exists in outdir")
+    ap.add_argument("--include-surveys", action="store_true",
+                    help="Also process survey-type quizzes (batch mode)")
+
     ap.add_argument("-n", "--dry-run", action="store_true",
                     help="Show what would be done without making changes")
     ap.add_argument("-v", "--verbose", action="store_true",
@@ -246,146 +395,90 @@ def main():
     token = read_token(args.token, args.token_file)
     base_url = args.base_url.rstrip("/")
 
-    if args.verbose:
-        print(f"[INFO] Course: {args.course_id}, Quiz: {args.quiz_id}")
-        print(f"[INFO] Report type: {args.report_type}")
-        print(f"[INFO] All versions: {args.all_versions}")
-
-    if args.dry_run:
-        print(f"[DRY RUN] Would POST to create {args.report_type} report "
-              f"for course {args.course_id}, quiz {args.quiz_id}")
-        print(f"[DRY RUN] Would poll progress until complete")
-        print(f"[DRY RUN] Would download CSV to: {args.outdir}/")
-        return
-
-    # Step 1: Trigger report generation
-    if args.verbose:
-        print(f"[INFO] Triggering {args.report_type} report...")
-
-    try:
-        report = create_quiz_report(
-            base_url, token, args.course_id, args.quiz_id,
-            report_type=args.report_type,
-            includes_all_versions=args.all_versions,
-            verbose=args.verbose)
-    except urllib.error.HTTPError as e:
-        if e.code == 409:
-            print("[WARN] Report is already being generated. "
-                  "Retrying to fetch existing report...",
-                  file=sys.stderr)
-            # A 409 means a report is in progress.  Re-POST returns
-            # the existing report object on some Canvas versions;
-            # on others we need to list reports.  Try listing.
-            report = create_quiz_report(
-                base_url, token, args.course_id, args.quiz_id,
-                report_type=args.report_type,
-                includes_all_versions=args.all_versions,
-                verbose=args.verbose)
-        else:
-            raise
-
-    report_id = report.get("id")
-    if report_id is None:
-        print("[ERROR] No report id in API response.", file=sys.stderr)
-        print(f"[DEBUG] Response: {report}", file=sys.stderr)
-        sys.exit(1)
-
-    if args.verbose:
-        print(f"[INFO] Report id: {report_id}")
-
-    # Step 2: Poll progress if the report is not already complete
-    progress_url = report.get("progress_url")
-    file_obj = report.get("file")
-
-    if file_obj and file_obj.get("url"):
-        # Report was already generated and cached by Canvas
-        if args.verbose:
-            print("[INFO] Report already available (cached).")
-    elif progress_url:
-        progress_id = extract_progress_id(progress_url)
-        if args.verbose:
-            print(f"[INFO] Polling progress {progress_id} "
-                  f"every {args.poll_interval}s...")
-        poll_until_complete(base_url, token, progress_id,
-                            poll_interval=args.poll_interval,
-                            verbose=args.verbose)
-
-        # Step 3: Fetch the report object to get the file URL
-        if args.verbose:
-            print("[INFO] Fetching report with file attachment...")
-        report = get_quiz_report(base_url, token, args.course_id,
-                                 args.quiz_id, report_id,
-                                 verbose=args.verbose)
-        file_obj = report.get("file")
-    else:
-        print("[ERROR] No progress_url or file in report response.",
-              file=sys.stderr)
-        print(f"[DEBUG] Response: {report}", file=sys.stderr)
-        sys.exit(1)
-
-    if not file_obj or not file_obj.get("url"):
-        print("[ERROR] Report completed but no file URL found.",
-              file=sys.stderr)
-        print(f"[DEBUG] Report: {report}", file=sys.stderr)
-        sys.exit(1)
-
-    download_url = file_obj["url"]
-
-    # Fetch quiz title for the filename
-    quiz_slug = ""
-    try:
+    # Build the list of quizzes to process
+    if args.quiz_id is not None:
+        # Single-quiz mode: fetch the quiz object for its title
         quiz_obj = get_quiz(base_url, token, args.course_id, args.quiz_id,
                             verbose=args.verbose)
-        quiz_title = quiz_obj.get("title", "")
-        if quiz_title:
-            quiz_slug = sanitize_for_filename(quiz_title)
-            if args.verbose:
-                print(f"[INFO] Quiz title: {quiz_title}")
-    except Exception:
-        if args.verbose:
-            print("[WARN] Could not fetch quiz title; "
-                  "using IDs only for filename.")
-
-    # Build filename:
-    #   {quiz_slug}_{report.type}_{course}-{quiz}_{date}.csv
-    # e.g. S01_2025-01-16_Mutations.Teamwork_student.analysis_12345-67890_2026-02-19.csv
-    # When --anonymize, omit course/quiz IDs from the filename.
-    today = time.strftime("%Y-%m-%d")
-    report_label = args.report_type.replace("_", ".")
-    if args.anonymize:
-        ids_label = ""
+        quiz_list = [quiz_obj]
     else:
-        ids_label = f"_{args.course_id}-{args.quiz_id}"
-    if quiz_slug:
-        filename = f"{quiz_slug}_{report_label}{ids_label}_{today}.csv"
-    else:
-        filename = f"{report_label}{ids_label}_{today}.csv"
+        # Batch mode: fetch all published quizzes
+        print(f"Fetching quiz list for course {args.course_id}...")
+        quiz_list = get_quizzes(base_url, token, args.course_id,
+                                verbose=args.verbose)
+        quiz_list = [q for q in quiz_list if q.get("published")]
+        if not args.include_surveys:
+            quiz_list = [q for q in quiz_list
+                         if q.get("quiz_type") not in
+                         ("survey", "graded_survey")]
+        quiz_list.sort(key=lambda q: q.get("title", ""))
 
-    if args.verbose:
-        print(f"[INFO] Downloading to: {filename}")
+    if not quiz_list:
+        print("No quizzes matched filters.")
+        return
 
-    # Step 4: Download the CSV (NO auth header -- verifier is in the URL)
-    csv_bytes = http_get_raw(download_url)
+    if len(quiz_list) > 1:
+        print(f"Found {len(quiz_list)} quizzes to process.\n")
 
-    # Flatten embedded newlines unless --keep-newlines was given
-    if not args.keep_newlines:
-        csv_bytes = flatten_newlines_in_csv(csv_bytes)
-        if args.verbose:
-            print("[INFO] Flattened embedded newlines in CSV fields.")
+    # Dry-run output
+    if args.dry_run:
+        for q in quiz_list:
+            qid = q.get("id", "?")
+            title = q.get("title", "(untitled)")
+            slug = sanitize_for_filename(title) if title else ""
+            existing = file_already_exists(
+                args.outdir, slug, args.report_type,
+                args.course_id, qid, args.anonymize)
+            skip_note = "  [exists, would skip]" if (args.update and existing) else ""
+            print(f"  [DRY RUN] quiz {qid}: {title}{skip_note}")
+        return
 
-    # Anonymize student PII if requested
-    if args.anonymize:
-        csv_bytes = anonymize_csv(csv_bytes)
-        if args.verbose:
-            print("[INFO] Anonymized student PII columns.")
+    # Process each quiz
+    ok_count = 0
+    skip_count = 0
+    fail_count = 0
+    total = len(quiz_list)
 
-    # Write to disk
-    os.makedirs(args.outdir, exist_ok=True)
-    outpath = os.path.join(args.outdir, filename)
-    with open(outpath, "wb") as f:
-        f.write(csv_bytes)
+    for i, q in enumerate(quiz_list, 1):
+        qid = q.get("id")
+        title = q.get("title", "(untitled)")
+        prefix = f"[{i}/{total}] " if total > 1 else ""
+        print(f"{prefix}Quiz {qid}: {title}")
 
-    print(f"[OK] Saved {len(csv_bytes)} bytes to {outpath}")
+        outpath, err = download_one_report(
+            base_url=base_url,
+            token=token,
+            course_id=args.course_id,
+            quiz_id=qid,
+            quiz_title=title,
+            report_type=args.report_type,
+            includes_all_versions=args.all_versions,
+            poll_interval=args.poll_interval,
+            keep_newlines=args.keep_newlines,
+            anonymize=args.anonymize,
+            outdir=args.outdir,
+            update=args.update,
+            verbose=args.verbose,
+        )
+
+        if err == "skip":
+            print(f"  [SKIP] Already exists: {outpath}")
+            skip_count += 1
+        elif err:
+            print(f"  [FAIL] {err}", file=sys.stderr)
+            fail_count += 1
+        else:
+            print(f"  [OK] {outpath}")
+            ok_count += 1
+
+    # Summary line for batch mode
+    if total > 1:
+        parts = [f"{ok_count} downloaded"]
+        if skip_count:
+            parts.append(f"{skip_count} skipped")
+        if fail_count:
+            parts.append(f"{fail_count} failed")
+        print(f"\nDone: {', '.join(parts)} (of {total} quizzes).")
 
 
 if __name__ == "__main__":
