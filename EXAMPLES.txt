@@ -6,13 +6,13 @@ Example (offline/mock -> canonical JSON -> HTML + SQLite)
    - mock_quiz_submission_<id>_questions.json
 
 2) Convert mocks to canonical JSON:
-   python3 src/mock_to_json.py data/mock_api --outdir output/JSON --verbose
+   python3 src/canvas.api.mock_to_json.py data/mock_api --outdir output/JSON --verbose
 
 3) Render HTML:
-   python3 src/json_to_html.py output/JSON --outdir output/HTML --verbose
+   python3 src/canvas.api.json_to_html.py output/JSON --outdir output/HTML --verbose
 
 4) Load SQLite:
-   python3 src/json_to_sqlite.py output/JSON output/SQLITE/quiz_archive.sqlite --verbose
+   python3 src/canvas.api.json_to_sqlite.py output/JSON output/SQLITE/quiz_archive.sqlite --verbose
 
 5) Or do 3+4 together:
-   python3 src/json_to_all.py output/JSON output/SQLITE/quiz_archive.sqlite --html-outdir output/HTML --verbose
+   python3 src/canvas.api.json_to_all.py output/JSON output/SQLITE/quiz_archive.sqlite --html-outdir output/HTML --verbose

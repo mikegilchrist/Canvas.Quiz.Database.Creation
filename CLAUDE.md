@@ -8,34 +8,54 @@ student files.
 ## Repository Layout
 
 ```
-src/                     Python modules + CLI entrypoints
-output/                  Generated output (gitignored, contains student PII)
-README.TOKEN.SETUP.md   How to create and store a Canvas API token
-EXAMPLES.txt            Offline mock pipeline walkthrough
-CHANGELOG.md            Release history
+src/                        Python modules + CLI entrypoints
+output/                     Generated output (gitignored, contains student PII)
+canvas.api.conf.example     Example user profile config
+README.TOKEN.SETUP.md       How to create and store a Canvas API token
+EXAMPLES.txt                Offline mock pipeline walkthrough
+CHANGELOG.md                Release history
 ```
+
+## User Profile: `~/.canvas.api.conf`
+
+INI-style config read by all API-calling CLIs. Eliminates the need to
+pass `--base-url` and `--token-file` on every invocation.
+
+```ini
+[default]
+base_url = https://utk.instructure.com
+token_file = ~/.canvas_token
+```
+
+- Loaded by `load_profile()` in `io_utils.py`
+- CLI arguments always override config values
+- Missing config file is silently ignored (args become required)
 
 ## CLI Entrypoints (src/)
 
-All CLIs accept `--base-url URL` and `--token TOKEN | --token-file FILE`.
-Run any with `--help` for full usage.
+All prefixed with `canvas.api.` for tab-completion. Run any with `--help`.
 
-| Script                  | Purpose                                          |
-|-------------------------|--------------------------------------------------|
-| `list_courses.py`       | List courses; filter by `-y YEAR`, `-s SEMESTER` |
-| `list_quizzes.py`       | List quizzes in a course                         |
-| `list_assignments.py`   | List assignments; filter by `--group NAME`       |
-| `report_to_csv.py`      | Download quiz Student/Item Analysis CSVs         |
-| `submissions_to_files.py` | Download assignment submissions (files, rubric, comments) |
-| `api_to_json.py`        | Export quiz submissions to canonical JSON        |
-| `json_to_html.py`       | Render canonical JSON to per-submission HTML     |
-| `json_to_sqlite.py`     | Load canonical JSON into SQLite                  |
-| `json_to_all.py`        | Run json_to_html + json_to_sqlite together       |
-| `mock_to_json.py`       | Convert offline mock payloads to canonical JSON  |
+**API scripts** (require base_url + token via config or CLI):
+
+| Script                                  | Required Args     | Purpose                                          |
+|-----------------------------------------|-------------------|--------------------------------------------------|
+| `canvas.api.list_courses.py`            | (none)            | List courses; `-y YEAR`, `-s SEMESTER`           |
+| `canvas.api.list_quizzes.py`            | COURSE_ID         | List quizzes in a course                         |
+| `canvas.api.list_assignments.py`        | COURSE_ID         | List assignments; `--group NAME`                 |
+| `canvas.api.report_to_csv.py`           | COURSE_ID         | Download quiz Student/Item Analysis CSVs         |
+| `canvas.api.submissions_to_files.py`    | COURSE_ID         | Download assignment submissions and files        |
+| `canvas.api.to_json.py`                 | COURSE_ID QUIZ_ID | Export quiz submissions to canonical JSON        |
+
+**Offline scripts** (no API access needed):
+
+| Script                                  | Required Args  | Purpose                                     |
+|-----------------------------------------|----------------|---------------------------------------------|
+| `canvas.api.json_to_html.py`            | JSON_DIR       | Render canonical JSON to per-submission HTML |
+| `canvas.api.json_to_sqlite.py`          | JSON_DIR OUTDB | Load canonical JSON into SQLite             |
+| `canvas.api.json_to_all.py`             | JSON_DIR OUTDB | Run json_to_html + json_to_sqlite together  |
+| `canvas.api.mock_to_json.py`            | MOCK_DIR       | Convert offline mock payloads to canonical JSON |
 
 ### Common Flags
-
-Most CLIs support these flags:
 
 - `-v, --verbose` -- detailed progress output
 - `-n, --dry-run` -- show what would be done without making changes
@@ -48,7 +68,7 @@ Most CLIs support these flags:
 |------------------|---------------------------------------------------|
 | `canvas_http.py` | HTTP layer: GET/POST with auth, pagination, raw download |
 | `canvas_api.py`  | Canvas endpoint wrappers (courses, quizzes, assignments, submissions, reports, rubrics) |
-| `io_utils.py`    | JSON I/O helpers, `read_token()`                  |
+| `io_utils.py`    | JSON I/O helpers, `read_token()`, `load_profile()` |
 | `model.py`       | Canonical JSON schema for quiz submissions        |
 | `render_html.py` | HTML rendering for quiz submissions               |
 | `sqlite_writer.py` | SQLite schema and insert logic                  |
@@ -69,8 +89,9 @@ Most CLIs support these flags:
 Store your Canvas API token in `~/.canvas_token` (chmod 600).
 See README.TOKEN.SETUP.md for step-by-step instructions.
 
-Pass it to any CLI via `--token-file ~/.canvas_token` or
-`--token <inline-token>`.
+With a profile config (`~/.canvas.api.conf`), no auth arguments are
+needed on the command line. Without it, pass `--token-file ~/.canvas_token`
+or `--token <inline-token>`.
 
 ## Output and PII
 
@@ -83,12 +104,12 @@ Pass it to any CLI via `--token-file ~/.canvas_token` or
 
 - Underscores separate major sections, periods separate words within a section
 - Example: `S01_2025-01-16_Mutations.Teamwork_student.analysis_12345-67890_2026-02-19.csv`
-- `sanitize_for_filename()` in `report_to_csv.py` and `submissions_to_files.py`
-  handles the slug conversion
+- `sanitize_for_filename()` in `canvas.api.report_to_csv.py` and
+  `canvas.api.submissions_to_files.py` handles the slug conversion
 
 ## Development
 
 - Python 3.7+, stdlib only (no pip dependencies)
-- All scripts run from the repo root: `python3 src/script.py ...`
+- All scripts run from the repo root: `python3 src/canvas.api.script.py ...`
 - CLI entrypoints should be executable (`chmod +x`)
 - Library modules are not executable

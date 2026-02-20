@@ -7,63 +7,91 @@ REST API.
 **Output formats:** JSON, HTML, SQLite, CSV, and downloaded student files
 (PDF, Word, etc.)
 
+## Setup
+
+### 1. Create a Canvas API token
+
+See [README.TOKEN.SETUP.md](README.TOKEN.SETUP.md) for step-by-step
+instructions. Save the token to `~/.canvas_token` (chmod 600).
+
+### 2. Create a profile config (recommended)
+
+Copy the example and edit:
+
+```bash
+cp canvas.api.conf.example ~/.canvas.api.conf
+```
+
+Contents of `~/.canvas.api.conf`:
+
+```ini
+[default]
+base_url = https://utk.instructure.com
+token_file = ~/.canvas_token
+```
+
+With a profile config in place, you never need to pass `--base-url` or
+`--token-file` on the command line. CLI arguments always override the
+config if provided.
+
 ## Quick Start
 
-1. Create a Canvas API token and save it to `~/.canvas_token`
-   (see [README.TOKEN.SETUP.md](README.TOKEN.SETUP.md))
+With a profile config, the commands are short:
 
-2. List your courses:
-   ```bash
-   python3 src/list_courses.py --base-url https://utk.instructure.com \
-       --token-file ~/.canvas_token -y 2026 -s Spring
-   ```
+```bash
+# List your courses (filter by year and/or semester)
+python3 src/canvas.api.list_courses.py -y 2025 -s Spring
 
-3. List quizzes or assignments in a course:
-   ```bash
-   python3 src/list_quizzes.py 215694 --base-url https://utk.instructure.com \
-       --token-file ~/.canvas_token
+# List quizzes in a course
+python3 src/canvas.api.list_quizzes.py COURSE_ID
 
-   python3 src/list_assignments.py 215694 --base-url https://utk.instructure.com \
-       --token-file ~/.canvas_token --group Homework
-   ```
+# List assignments (filter by grading group)
+python3 src/canvas.api.list_assignments.py COURSE_ID --group Homework
 
-4. Download quiz report CSVs:
-   ```bash
-   python3 src/report_to_csv.py 215694 --base-url https://utk.instructure.com \
-       --token-file ~/.canvas_token --verbose
-   ```
+# Download quiz report CSVs (all quizzes in a course)
+python3 src/canvas.api.report_to_csv.py COURSE_ID
 
-5. Download assignment submissions (files, rubric, comments):
-   ```bash
-   python3 src/submissions_to_files.py 215694 --base-url https://utk.instructure.com \
-       --token-file ~/.canvas_token --group Homework --verbose
-   ```
+# Download assignment submissions (files, rubric, comments)
+python3 src/canvas.api.submissions_to_files.py COURSE_ID --group Homework
 
-6. Export quiz submissions to JSON, then render HTML + SQLite:
-   ```bash
-   python3 src/api_to_json.py 215694 12345 --base-url https://utk.instructure.com \
-       --token-file ~/.canvas_token --outdir output/JSON --verbose
+# Export quiz submissions to JSON, then render HTML + SQLite
+python3 src/canvas.api.to_json.py COURSE_ID QUIZ_ID --outdir output/JSON
+python3 src/canvas.api.json_to_all.py output/JSON output/SQLITE/quiz_archive.sqlite
+```
 
-   python3 src/json_to_all.py output/JSON output/SQLITE/quiz_archive.sqlite \
-       --html-outdir output/HTML --verbose
-   ```
+Without a profile config, pass `--base-url` and `--token-file` explicitly:
+
+```bash
+python3 src/canvas.api.list_courses.py \
+    --base-url https://utk.instructure.com \
+    --token-file ~/.canvas_token -y 2025 -s Spring
+```
 
 ## CLI Scripts
 
-All scripts are in `src/` and accept `--help` for full usage.
+All scripts are in `src/`, prefixed with `canvas.api.` for easy
+tab-completion. Run any with `--help` for full usage.
 
-| Script                    | Purpose                                          |
-|---------------------------|--------------------------------------------------|
-| `list_courses.py`         | List courses; filter by `-y YEAR`, `-s SEMESTER` |
-| `list_quizzes.py`         | List quizzes in a course                         |
-| `list_assignments.py`     | List assignments; filter by `--group NAME`       |
-| `report_to_csv.py`        | Download quiz Student/Item Analysis CSVs         |
-| `submissions_to_files.py` | Download assignment submissions and files        |
-| `api_to_json.py`          | Export quiz submissions to canonical JSON        |
-| `json_to_html.py`         | Render canonical JSON to per-submission HTML     |
-| `json_to_sqlite.py`       | Load canonical JSON into SQLite                  |
-| `json_to_all.py`          | Run json_to_html + json_to_sqlite together       |
-| `mock_to_json.py`         | Convert offline mock payloads to canonical JSON  |
+**Scripts that call the Canvas API** (require base_url + token, from
+config file or CLI):
+
+| Script                                  | Required Args  | Purpose                                          |
+|-----------------------------------------|----------------|--------------------------------------------------|
+| `canvas.api.list_courses.py`            | (none)         | List courses; filter by `-y YEAR`, `-s SEMESTER` |
+| `canvas.api.list_quizzes.py`            | COURSE_ID      | List quizzes in a course                         |
+| `canvas.api.list_assignments.py`        | COURSE_ID      | List assignments; filter by `--group NAME`       |
+| `canvas.api.report_to_csv.py`           | COURSE_ID      | Download quiz Student/Item Analysis CSVs         |
+| `canvas.api.submissions_to_files.py`    | COURSE_ID      | Download assignment submissions and files        |
+| `canvas.api.to_json.py`                 | COURSE_ID QUIZ_ID | Export quiz submissions to canonical JSON     |
+
+**Offline scripts** (no API access needed):
+
+| Script                                  | Required Args         | Purpose                                     |
+|-----------------------------------------|-----------------------|---------------------------------------------|
+| `canvas.api.json_to_html.py`            | JSON_DIR              | Render canonical JSON to per-submission HTML |
+| `canvas.api.json_to_sqlite.py`          | JSON_DIR OUTDB        | Load canonical JSON into SQLite             |
+| `canvas.api.json_to_all.py`             | JSON_DIR OUTDB        | Run json_to_html + json_to_sqlite together  |
+| `canvas.api.mock_to_json.py`            | MOCK_DIR              | Convert offline mock payloads to canonical JSON |
 
 ### Common Flags
 

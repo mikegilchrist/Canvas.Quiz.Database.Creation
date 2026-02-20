@@ -1,0 +1,11 @@
+# Canvas.API user profile
+#
+# Copy this file to ~/.canvas.api.conf and edit.
+# All CLI scripts will read defaults from this file so you don't
+# need to pass --base-url and --token-file on every invocation.
+#
+# CLI arguments always override these values.
+
+[default]
+base_url = https://utk.instructure.com
+token_file = ~/.canvas_token

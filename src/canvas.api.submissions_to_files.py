@@ -52,7 +52,7 @@ from canvas_api import (
     get_rubric,
 )
 from canvas_http import http_get_raw
-from io_utils import read_token
+from io_utils import load_profile, read_token
 
 
 # ---- Filename helpers ----
@@ -274,13 +274,14 @@ def main():
     ap.add_argument("assignment_id", nargs="?", type=int, default=None,
                     help="Canvas assignment ID (omit for batch mode)")
 
-    ap.add_argument("--base-url", required=True,
-                    help="Canvas instance URL "
-                         "(e.g. https://utk.instructure.com)")
+    ap.add_argument("--base-url", default=None,
+                    help="Canvas instance URL (or set base_url in "
+                         "~/.canvas.api.conf)")
     ap.add_argument("--token", default=None,
                     help="Canvas API token (inline)")
     ap.add_argument("--token-file", default=None,
-                    help="Path to file containing Canvas API token")
+                    help="Path to token file (or set token_file in "
+                         "~/.canvas.api.conf)")
 
     ap.add_argument("--group", default=None,
                     help="Filter by assignment group name (case-insensitive, "
@@ -301,7 +302,13 @@ def main():
 
     args = ap.parse_args()
 
-    token = read_token(args.token, args.token_file)
+    profile = load_profile()
+    if not args.base_url:
+        args.base_url = profile.get("base_url")
+    if not args.base_url:
+        ap.error("--base-url is required (or set base_url in "
+                 "~/.canvas.api.conf)")
+    token = read_token(args.token, args.token_file, profile)
     base_url = args.base_url.rstrip("/")
 
     # Build the list of assignments to process

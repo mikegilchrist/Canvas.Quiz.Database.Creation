@@ -32,7 +32,7 @@
 import argparse
 
 from canvas_api import get_assignment_groups, get_assignments
-from io_utils import read_token
+from io_utils import load_profile, read_token
 
 
 def resolve_group_id(base_url, token, course_id, group_name, verbose=False):
@@ -55,13 +55,14 @@ def main():
     ap.add_argument("course_id", type=int,
                     help="Canvas course ID")
 
-    ap.add_argument("--base-url", required=True,
-                    help="Canvas instance URL "
-                         "(e.g. https://utk.instructure.com)")
+    ap.add_argument("--base-url", default=None,
+                    help="Canvas instance URL (or set base_url in "
+                         "~/.canvas.api.conf)")
     ap.add_argument("--token", default=None,
                     help="Canvas API token (inline)")
     ap.add_argument("--token-file", default=None,
-                    help="Path to file containing Canvas API token")
+                    help="Path to token file (or set token_file in "
+                         "~/.canvas.api.conf)")
 
     ap.add_argument("--group", default=None,
                     help="Filter by assignment group name (case-insensitive)")
@@ -72,7 +73,13 @@ def main():
 
     args = ap.parse_args()
 
-    token = read_token(args.token, args.token_file)
+    profile = load_profile()
+    if not args.base_url:
+        args.base_url = profile.get("base_url")
+    if not args.base_url:
+        ap.error("--base-url is required (or set base_url in "
+                 "~/.canvas.api.conf)")
+    token = read_token(args.token, args.token_file, profile)
     base_url = args.base_url.rstrip("/")
 
     # Resolve group filter

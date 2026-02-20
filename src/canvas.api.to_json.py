@@ -15,7 +15,7 @@ import os
 import urllib.error
 
 from canvas_api import get_quiz_questions, get_quiz_submissions, get_submission_questions
-from io_utils import read_token, write_json
+from io_utils import load_profile, read_token, write_json
 from model import canonicalize_submission
 
 
@@ -24,9 +24,13 @@ def main():
     ap.add_argument("course_id", type=int)
     ap.add_argument("quiz_id", type=int)
 
-    ap.add_argument("--base-url", required=True)
+    ap.add_argument("--base-url", default=None,
+                    help="Canvas instance URL (or set base_url in "
+                         "~/.canvas.api.conf)")
     ap.add_argument("--token", default=None)
-    ap.add_argument("--token-file", default=None)
+    ap.add_argument("--token-file", default=None,
+                    help="Path to token file (or set token_file in "
+                         "~/.canvas.api.conf)")
 
     ap.add_argument("--outdir", default=os.path.join("output", "JSON"))
     ap.add_argument("--dry-run", action="store_true")
@@ -34,7 +38,13 @@ def main():
 
     args = ap.parse_args()
 
-    token = read_token(args.token, args.token_file)
+    profile = load_profile()
+    if not args.base_url:
+        args.base_url = profile.get("base_url")
+    if not args.base_url:
+        ap.error("--base-url is required (or set base_url in "
+                 "~/.canvas.api.conf)")
+    token = read_token(args.token, args.token_file, profile)
     base_url = args.base_url.rstrip("/")
 
     if args.verbose:
