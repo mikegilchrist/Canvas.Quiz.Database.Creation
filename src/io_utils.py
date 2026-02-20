@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
 # Date: 2026-02-20
-# Version: 1.2.0
+# Version: 1.3.0
 # Purpose: Small IO helpers for reading/writing JSON files, selecting inputs,
 #          and loading the user profile (~/.canvas.api.conf).
 # Usage: Imported by CLI scripts.
@@ -14,6 +14,7 @@
 import configparser
 import json
 import os
+import re
 
 
 def write_json(path, obj):
@@ -34,6 +35,40 @@ def list_json_files(folder):
             out.append(os.path.join(folder, name))
     return out
 
+
+# ---- Filename helpers ----
+
+def sanitize_for_filename(text, max_len=50):
+    """Turn a title into a filesystem-safe slug.
+
+    Convention: underscores separate major sections, periods separate
+    words within a section.
+
+    Example: "S01: 2025-01-16 - Mutations/Teamwork"
+          -> "S01_2025-01-16_Mutations.Teamwork"
+    """
+    text = text.strip()
+    # Section separators (": ", " - ") become underscores
+    text = re.sub(r'\s*:\s*', '_', text)
+    text = re.sub(r'\s+-\s+', '_', text)
+    # Slashes and commas become periods (within-topic separator)
+    text = re.sub(r'[/,]+', '.', text)
+    # Remaining spaces become periods (words within a section)
+    text = re.sub(r'\s+', '.', text)
+    # Strip characters unsafe for filenames
+    text = re.sub(r'[\\*?"<>|]+', '', text)
+    # Collapse runs of underscores or periods
+    text = re.sub(r'_+', '_', text)
+    text = re.sub(r'\.+', '.', text)
+    # Remove trailing underscores/periods
+    text = re.sub(r'[_.]+$', '', text)
+    # Truncate cleanly
+    if len(text) > max_len:
+        text = text[:max_len].rstrip('_.')
+    return text
+
+
+# ---- Profile config ----
 
 _PROFILE_PATH = os.path.expanduser("~/.canvas.api.conf")
 

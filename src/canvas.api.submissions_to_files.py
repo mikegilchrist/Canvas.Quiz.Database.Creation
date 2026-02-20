@@ -41,7 +41,6 @@
 import argparse
 import json
 import os
-import re
 import sys
 
 from canvas_api import (
@@ -52,36 +51,7 @@ from canvas_api import (
     get_rubric,
 )
 from canvas_http import http_get_raw
-from io_utils import load_profile, read_token
-
-
-# ---- Filename helpers ----
-
-def sanitize_for_filename(text, max_len=50):
-    """Turn a title into a filesystem-safe slug.
-
-    Convention: underscores separate major sections, periods separate
-    words within a section.
-    """
-    text = text.strip()
-    # Section separators (": ", " - ") become underscores
-    text = re.sub(r'\s*:\s*', '_', text)
-    text = re.sub(r'\s+-\s+', '_', text)
-    # Slashes and commas become periods (within-topic separator)
-    text = re.sub(r'[/,]+', '.', text)
-    # Remaining spaces become periods (words within a section)
-    text = re.sub(r'\s+', '.', text)
-    # Strip characters unsafe for filenames
-    text = re.sub(r'[\\*?"<>|]+', '', text)
-    # Collapse runs of underscores or periods
-    text = re.sub(r'_+', '_', text)
-    text = re.sub(r'\.+', '.', text)
-    # Remove trailing underscores/periods
-    text = re.sub(r'[_.]+$', '', text)
-    # Truncate cleanly
-    if len(text) > max_len:
-        text = text[:max_len].rstrip('_.')
-    return text
+from io_utils import load_profile, read_token, sanitize_for_filename
 
 
 def student_slug(submission, index, anonymize):

@@ -159,3 +159,39 @@ def get_rubric(base_url, token, course_id, rubric_id, verbose=False):
         print(f"[GET] {url}")
     data, _headers = http_get_json(url, token)
     return data
+
+
+# ---- Discussions ----
+
+def get_discussion_topics(base_url, token, course_id, verbose=False):
+    """GET all discussion topics in a course."""
+    url = (f"{base_url}/api/v1/courses/{course_id}"
+           f"/discussion_topics?per_page=100")
+    return paginated_get_all(url, token, verbose=verbose)
+
+
+def get_discussion_topic(base_url, token, course_id, topic_id,
+                         verbose=False):
+    """GET a single discussion topic object."""
+    url = (f"{base_url}/api/v1/courses/{course_id}"
+           f"/discussion_topics/{topic_id}")
+    if verbose:
+        print(f"[GET] {url}")
+    data, _headers = http_get_json(url, token)
+    return data
+
+
+def get_discussion_topic_view(base_url, token, course_id, topic_id,
+                              verbose=False):
+    """GET the full threaded view of a discussion topic.
+
+    Returns a dict with keys: participants, unread_entries,
+    entry_ratings, forced_entries, view (nested entries), new_entries.
+    This is a single non-paginated response.
+    """
+    url = (f"{base_url}/api/v1/courses/{course_id}"
+           f"/discussion_topics/{topic_id}/view")
+    if verbose:
+        print(f"[GET] {url}")
+    data, _headers = http_get_json(url, token)
+    return data
