@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # ============================================================================
 # Script:       canvas.api.to_json.py
-# Version:      1.1.0
+# Version:      2.0.0
 # Date:         2026-02-20
 # Purpose:      Fetch Classic Quiz data via Canvas API and write canonical
 #               per-submission JSON files.
@@ -34,24 +34,48 @@
 import argparse
 import os
 import sys
-import urllib.error
 
 from canvas_api import (
     get_quiz,
-    get_quiz_questions,
+    get_quiz_submission_data,
     get_quiz_submissions,
     get_quizzes,
     get_submission_questions,
 )
+from canvas_http import http_get_json
 from io_utils import load_profile, read_token, sanitize_for_filename, write_json
-from model import canonicalize_submission
+from model import build_quiz_question_lookup, canonicalize_submission_v2
 
 
 # ---- Core export logic ----
 
+def _get_quiz_question_metadata(base_url, token, quiz_submission_id, verbose):
+    """Fetch quiz question metadata via the Quiz Submission Questions API.
+
+    This endpoint returns both quiz_submission_questions and quiz_questions.
+    We use the quiz_questions list which has prompts, answer options, types.
+    Falls back to empty list on error.
+    """
+    url = (f"{base_url}/api/v1/quiz_submissions/{quiz_submission_id}"
+           f"/questions?include[]=quiz_question&per_page=100")
+    if verbose:
+        print(f"  [GET] {url}")
+    try:
+        data, _headers = http_get_json(url, token)
+        return data.get("quiz_questions", [])
+    except Exception as e:
+        if verbose:
+            print(f"  [WARN] Could not fetch quiz question metadata: {e}")
+        return []
+
+
 def export_one_quiz(base_url, token, course_id, quiz,
                     outdir, update, verbose):
     """Export submissions for a single quiz to canonical JSON files.
+
+    Uses the Assignment Submissions API (include[]=submission_history)
+    to get actual student answer data (submission_data), and the Quiz
+    Submission Questions API for question metadata (prompts, answers).
 
     Returns (quiz_dir, status_str) where status_str is one of:
     None (success), "skip" (--update), or an error message.
@@ -69,47 +93,72 @@ def export_one_quiz(base_url, token, course_id, quiz,
             return quiz_dir, "skip"
 
     try:
-        # Fetch quiz questions (may 403 on UTK Canvas)
-        if verbose:
-            print("  [INFO] Fetching quiz questions...")
-        try:
-            quiz_questions = get_quiz_questions(
-                base_url, token, course_id, qid, verbose=verbose)
-        except urllib.error.HTTPError as e:
-            if e.code == 403:
-                quiz_questions = []
-                if verbose:
-                    print("  [WARN] 403 on quiz questions endpoint; "
-                          "continuing without question data.")
-            else:
-                raise
+        assignment_id = quiz.get("assignment_id")
+        if not assignment_id:
+            return None, f"Quiz {qid} has no linked assignment"
 
-        # Fetch submissions
+        # Fetch quiz submissions (for timing, score, user_id)
         if verbose:
             print("  [INFO] Fetching quiz submissions...")
-        submissions = get_quiz_submissions(
+        quiz_subs = get_quiz_submissions(
             base_url, token, course_id, qid, verbose=verbose)
 
         if verbose:
-            print(f"  [INFO] {len(submissions)} submissions")
+            print(f"  [INFO] {len(quiz_subs)} quiz submissions")
+
+        # Fetch assignment submissions with submission_history
+        # (contains submission_data with actual answers)
+        if verbose:
+            print("  [INFO] Fetching submission answer data...")
+        assign_subs = get_quiz_submission_data(
+            base_url, token, course_id, assignment_id, verbose=verbose)
+
+        # Build user_id -> submission_data mapping
+        user_sub_data = {}
+        for asub in assign_subs:
+            uid = asub.get("user_id")
+            history = asub.get("submission_history", [])
+            if history:
+                # Use the most recent attempt's submission_data
+                latest = history[-1]
+                sd = latest.get("submission_data")
+                if sd:
+                    user_sub_data[uid] = sd
+
+        # Fetch quiz question metadata (prompts, answer options, types)
+        # from the first quiz submission we have
+        qq_lookup = {}
+        if quiz_subs:
+            first_sid = quiz_subs[0].get("id")
+            if first_sid:
+                qq_list = _get_quiz_question_metadata(
+                    base_url, token, first_sid, verbose=verbose)
+                qq_lookup = build_quiz_question_lookup(qq_list)
 
         os.makedirs(quiz_dir, exist_ok=True)
 
-        for sub in submissions:
-            sid = sub.get("id")
+        written = 0
+        for qs in quiz_subs:
+            sid = qs.get("id")
+            uid = qs.get("user_id")
             if sid is None:
                 continue
-            if verbose:
-                print(f"  [INFO] Fetching submission questions for "
-                      f"submission_id={sid}")
-            sub_questions = get_submission_questions(
-                base_url, token, int(sid), verbose=verbose)
-            doc = canonicalize_submission(sub, sub_questions, quiz_questions)
+
+            sd = user_sub_data.get(uid, [])
+            if not sd and verbose:
+                print(f"  [WARN] No submission_data for user {uid} "
+                      f"(submission {sid})")
+
+            doc = canonicalize_submission_v2(qs, sd, qq_lookup)
             doc["source"]["mode"] = "api"
             doc["source"]["notes"] = \
                 "Canonicalized from Canvas API payloads."
             outpath = os.path.join(quiz_dir, f"submission_{int(sid)}.json")
             write_json(outpath, doc)
+            written += 1
+
+        if verbose:
+            print(f"  [INFO] Wrote {written} submission files")
 
         return quiz_dir, None
 

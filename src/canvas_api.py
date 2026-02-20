@@ -151,6 +151,23 @@ def get_assignment_submissions(base_url, token, course_id, assignment_id,
     return paginated_get_all(url, token, verbose=verbose)
 
 
+def get_quiz_submission_data(base_url, token, course_id, assignment_id,
+                             verbose=False):
+    """GET assignment submissions with submission_history for quiz answer data.
+
+    Each returned submission includes submission_history entries, each of
+    which may contain submission_data (per-question answers, points, correct).
+    Lighter weight than get_assignment_submissions() -- only includes
+    submission_history and user info.
+    """
+    url = (f"{base_url}/api/v1/courses/{course_id}"
+           f"/assignments/{assignment_id}/submissions"
+           f"?per_page=100"
+           f"&include[]=submission_history"
+           f"&include[]=user")
+    return paginated_get_all(url, token, verbose=verbose)
+
+
 def get_rubric(base_url, token, course_id, rubric_id, verbose=False):
     """GET a rubric definition (criteria, ratings, descriptions)."""
     url = (f"{base_url}/api/v1/courses/{course_id}"

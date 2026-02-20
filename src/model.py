@@ -57,7 +57,10 @@ def canonicalize_submission(sub, submission_questions, quiz_questions):
 
     questions = []
     for sq in submission_questions:
-        qqref = sq.get("quiz_question") or {}
+        # Canvas may nest question metadata under "quiz_question" (when
+        # include[]=quiz_question is honored) or return it flat on the
+        # submission question object itself.
+        qqref = sq.get("quiz_question") or sq
         qid = qqref.get("id")
         if qid is None:
             continue
@@ -91,6 +94,120 @@ def canonicalize_submission(sub, submission_questions, quiz_questions):
 
             "question_response_obj": resp_obj,
             "question_response_html": resp_html,
+        })
+
+    return {
+        "submission": header,
+        "questions": questions,
+        "generated_utc": now_utc_iso(),
+        "source": {
+            "mode": None,
+            "notes": None,
+        },
+    }
+
+
+def build_quiz_question_lookup(quiz_questions):
+    """Build a lookup dict from quiz question metadata.
+
+    Accepts the list from either the quiz_questions key of the
+    Quiz Submission Questions API or from get_quiz_questions().
+    Returns {question_id: {question_text, question_type, position,
+    points_possible, answers, ...}}.
+    """
+    out = {}
+    for qq in quiz_questions:
+        qid = qq.get("id")
+        if qid is None:
+            continue
+        out[int(qid)] = qq
+    return out
+
+
+def canonicalize_submission_v2(quiz_sub, submission_data, quiz_question_lookup):
+    """Build canonical submission dict from assignment submission_data.
+
+    Args:
+        quiz_sub: Quiz submission object (from Quiz Submissions API).
+            Provides submission_id, user_id, quiz_id, timing, score.
+        submission_data: List of per-question answer dicts from the
+            Assignment Submissions API (submission_history[0].submission_data).
+            Each has: question_id, correct, points, answer_id/text.
+        quiz_question_lookup: Dict mapping question_id to quiz question
+            metadata (from build_quiz_question_lookup()).
+
+    Returns:
+        Canonical submission dict with submission header + questions list.
+    """
+    submission_id = quiz_sub.get("id")
+    quiz_id = quiz_sub.get("quiz_id")
+    user_id = quiz_sub.get("user_id")
+
+    if submission_id is None or quiz_id is None:
+        raise ValueError("quiz_sub missing id or quiz_id")
+
+    header = {
+        "submission_id": int(submission_id),
+        "student_id": int(user_id) if user_id is not None else None,
+        "quiz_id": int(quiz_id),
+        "quiz_name": (quiz_sub.get("quiz") or {}).get("title"),
+        "time_start": quiz_sub.get("started_at"),
+        "time_end": quiz_sub.get("finished_at"),
+        "time_total": quiz_sub.get("time_spent"),
+        "points_total": quiz_sub.get("score"),
+    }
+
+    questions = []
+    for sd in (submission_data or []):
+        qid = sd.get("question_id")
+        if qid is None:
+            continue
+        qid = int(qid)
+
+        meta = quiz_question_lookup.get(qid, {})
+
+        # Student response: answer_id for MC/TF, text for essay/short-answer
+        answer_id = sd.get("answer_id")
+        text = sd.get("text")
+
+        # Build response object
+        if text and str(text) != str(answer_id):
+            resp_obj = text
+        elif answer_id is not None:
+            resp_obj = answer_id
+        else:
+            resp_obj = None
+
+        # For MC/TF, resolve the answer text from the question's answers list
+        resp_html = None
+        if meta.get("answers") and answer_id is not None:
+            for ans in meta["answers"]:
+                if ans.get("id") == answer_id:
+                    resp_html = ans.get("text") or ans.get("html")
+                    break
+        if resp_html is None and isinstance(resp_obj, str):
+            resp_html = resp_obj
+
+        questions.append({
+            "submission_id": header["submission_id"],
+            "student_id": header["student_id"],
+            "quiz_id": header["quiz_id"],
+
+            "question_id": qid,
+            "question_position": meta.get("position"),
+            "question_type": meta.get("question_type"),
+            "question_name": meta.get("question_name"),
+
+            "points_possible": meta.get("points_possible"),
+            "earned_points": sd.get("points"),
+            "correct": sd.get("correct"),
+
+            "question_prompt_html": meta.get("question_text"),
+
+            "question_response_obj": resp_obj,
+            "question_response_html": resp_html,
+
+            "instructor_comment": sd.get("more_comments") or None,
         })
 
     return {
