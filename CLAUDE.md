@@ -1,9 +1,9 @@
 # Canvas.API
 
 Canvas LMS archival tool. Exports Classic Quiz submissions, assignment
-submissions (SpeedGrader data), and Student Analysis reports via the
-Canvas REST API. Output formats: JSON, HTML, SQLite, CSV, and downloaded
-student files.
+submissions (SpeedGrader data), discussion boards, and Student Analysis
+reports via the Canvas REST API. Output formats: JSON, HTML, SQLite, CSV,
+and downloaded student files.
 
 ## Repository Layout
 
@@ -44,7 +44,9 @@ All prefixed with `canvas.api.` for tab-completion. Run any with `--help`.
 | `canvas.api.list_assignments.py`        | COURSE_ID         | List assignments; `--group NAME`                 |
 | `canvas.api.report_to_csv.py`           | COURSE_ID         | Download quiz Student/Item Analysis CSVs         |
 | `canvas.api.submissions_to_files.py`    | COURSE_ID         | Download assignment submissions and files        |
-| `canvas.api.to_json.py`                 | COURSE_ID QUIZ_ID | Export quiz submissions to canonical JSON        |
+| `canvas.api.list_discussions.py`        | COURSE_ID         | List discussion topics                           |
+| `canvas.api.discussions_to_json.py`     | COURSE_ID         | Download discussion threads to JSON              |
+| `canvas.api.to_json.py`                 | COURSE_ID         | Export quiz submissions to canonical JSON        |
 
 **Offline scripts** (no API access needed):
 
@@ -67,8 +69,8 @@ All prefixed with `canvas.api.` for tab-completion. Run any with `--help`.
 | Module           | Purpose                                           |
 |------------------|---------------------------------------------------|
 | `canvas_http.py` | HTTP layer: GET/POST with auth, pagination, raw download |
-| `canvas_api.py`  | Canvas endpoint wrappers (courses, quizzes, assignments, submissions, reports, rubrics) |
-| `io_utils.py`    | JSON I/O helpers, `read_token()`, `load_profile()` |
+| `canvas_api.py`  | Canvas endpoint wrappers (courses, quizzes, assignments, discussions, submissions, reports, rubrics) |
+| `io_utils.py`    | JSON I/O helpers, `read_token()`, `load_profile()`, `sanitize_for_filename()` |
 | `model.py`       | Canonical JSON schema for quiz submissions        |
 | `render_html.py` | HTML rendering for quiz submissions               |
 | `sqlite_writer.py` | SQLite schema and insert logic                  |
@@ -79,6 +81,8 @@ All prefixed with `canvas.api.` for tab-completion. Run any with `--help`.
   download CSV (no auth header on final download -- verifier in URL)
 - Assignment Submissions API is synchronous; file attachment URLs also use
   verifier tokens (no auth header)
+- Discussion Topics `/view` endpoint returns full threaded discussion
+  (participants, entries, replies) in a single non-paginated response
 - UTK Canvas returns 403 on `/courses/:id/quizzes/:id/questions` even for
   instructors -- Student Analysis CSV bypasses this
 - Classic Quizzes and New Quizzes have separate APIs; this tool targets
@@ -104,8 +108,7 @@ or `--token <inline-token>`.
 
 - Underscores separate major sections, periods separate words within a section
 - Example: `S01_2025-01-16_Mutations.Teamwork_student.analysis_12345-67890_2026-02-19.csv`
-- `sanitize_for_filename()` in `canvas.api.report_to_csv.py` and
-  `canvas.api.submissions_to_files.py` handles the slug conversion
+- `sanitize_for_filename()` in `io_utils.py` handles the slug conversion
 
 ## Development
 

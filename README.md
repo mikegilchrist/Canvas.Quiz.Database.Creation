@@ -1,8 +1,8 @@
 # Canvas.API
 
 Canvas LMS archival tool for exporting Classic Quiz submissions, assignment
-submissions (SpeedGrader data), and Student Analysis reports via the Canvas
-REST API.
+submissions (SpeedGrader data), discussion boards, and Student Analysis
+reports via the Canvas REST API.
 
 **Output formats:** JSON, HTML, SQLite, CSV, and downloaded student files
 (PDF, Word, etc.)
@@ -54,8 +54,13 @@ python3 src/canvas.api.report_to_csv.py COURSE_ID
 # Download assignment submissions (files, rubric, comments)
 python3 src/canvas.api.submissions_to_files.py COURSE_ID --group Homework
 
-# Export quiz submissions to JSON, then render HTML + SQLite
-python3 src/canvas.api.to_json.py COURSE_ID QUIZ_ID --outdir output/JSON
+# List and download discussion boards
+python3 src/canvas.api.list_discussions.py COURSE_ID
+python3 src/canvas.api.discussions_to_json.py COURSE_ID
+
+# Export quiz submissions to JSON (all quizzes, or one specific quiz)
+python3 src/canvas.api.to_json.py COURSE_ID
+python3 src/canvas.api.to_json.py COURSE_ID QUIZ_ID
 python3 src/canvas.api.json_to_all.py output/JSON output/SQLITE/quiz_archive.sqlite
 ```
 
@@ -82,7 +87,9 @@ config file or CLI):
 | `canvas.api.list_assignments.py`        | COURSE_ID      | List assignments; filter by `--group NAME`       |
 | `canvas.api.report_to_csv.py`           | COURSE_ID      | Download quiz Student/Item Analysis CSVs         |
 | `canvas.api.submissions_to_files.py`    | COURSE_ID      | Download assignment submissions and files        |
-| `canvas.api.to_json.py`                 | COURSE_ID QUIZ_ID | Export quiz submissions to canonical JSON     |
+| `canvas.api.list_discussions.py`        | COURSE_ID      | List discussion topics in a course               |
+| `canvas.api.discussions_to_json.py`     | COURSE_ID      | Download discussion threads to JSON              |
+| `canvas.api.to_json.py`                 | COURSE_ID         | Export quiz submissions to canonical JSON     |
 
 **Offline scripts** (no API access needed):
 
@@ -106,6 +113,7 @@ All output goes to `output/` (gitignored). Subdirectories:
 
 - `output/CSV/` -- quiz report CSVs
 - `output/Assignments/` -- assignment submission files and metadata
+- `output/Discussions/` -- discussion topic metadata and threaded views
 - `output/JSON/` -- canonical quiz submission JSON
 - `output/HTML/` -- rendered quiz submission HTML
 - `output/SQLITE/` -- SQLite databases
@@ -122,6 +130,8 @@ Use `--anonymize` to strip PII, and never commit the `output/` directory.
 
 - Quiz Reports API is asynchronous (POST, poll, download)
 - Assignment Submissions API is synchronous
+- Discussion Topics API: `/view` endpoint returns full threaded discussion
+  in a single response
 - File downloads use verifier tokens in the URL (no auth header)
 - Targets Classic Quizzes; New Quizzes have a separate API
 - UTK Canvas returns 403 on quiz questions endpoint even for instructors;
