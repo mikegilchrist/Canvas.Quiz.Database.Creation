@@ -92,3 +92,70 @@ def get_progress(base_url, token, progress_id, verbose=False):
         print(f"[GET] {url}")
     data, _headers = http_get_json(url, token)
     return data
+
+
+# ---- Courses ----
+
+def get_courses(base_url, token, verbose=False):
+    """GET all courses for the authenticated user, with term info."""
+    url = (f"{base_url}/api/v1/courses"
+           f"?per_page=100"
+           f"&include[]=term"
+           f"&include[]=total_students")
+    return paginated_get_all(url, token, verbose=verbose)
+
+
+# ---- Assignments ----
+
+def get_assignment_groups(base_url, token, course_id, verbose=False):
+    """GET all assignment groups (grading categories) in a course."""
+    url = (f"{base_url}/api/v1/courses/{course_id}"
+           f"/assignment_groups?per_page=100")
+    return paginated_get_all(url, token, verbose=verbose)
+
+
+def get_assignments(base_url, token, course_id, assignment_group_id=None,
+                    verbose=False):
+    """GET all assignments in a course, optionally filtered by group."""
+    if assignment_group_id:
+        url = (f"{base_url}/api/v1/courses/{course_id}"
+               f"/assignment_groups/{assignment_group_id}"
+               f"/assignments?per_page=100")
+    else:
+        url = (f"{base_url}/api/v1/courses/{course_id}"
+               f"/assignments?per_page=100")
+    return paginated_get_all(url, token, verbose=verbose)
+
+
+def get_assignment(base_url, token, course_id, assignment_id, verbose=False):
+    """GET a single assignment object."""
+    url = (f"{base_url}/api/v1/courses/{course_id}"
+           f"/assignments/{assignment_id}")
+    if verbose:
+        print(f"[GET] {url}")
+    data, _headers = http_get_json(url, token)
+    return data
+
+
+def get_assignment_submissions(base_url, token, course_id, assignment_id,
+                               verbose=False):
+    """GET all submissions for an assignment with comments, rubric, history."""
+    url = (f"{base_url}/api/v1/courses/{course_id}"
+           f"/assignments/{assignment_id}/submissions"
+           f"?per_page=100"
+           f"&include[]=submission_comments"
+           f"&include[]=rubric_assessment"
+           f"&include[]=submission_history"
+           f"&include[]=user"
+           f"&include[]=group")
+    return paginated_get_all(url, token, verbose=verbose)
+
+
+def get_rubric(base_url, token, course_id, rubric_id, verbose=False):
+    """GET a rubric definition (criteria, ratings, descriptions)."""
+    url = (f"{base_url}/api/v1/courses/{course_id}"
+           f"/rubrics/{rubric_id}")
+    if verbose:
+        print(f"[GET] {url}")
+    data, _headers = http_get_json(url, token)
+    return data
