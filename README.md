@@ -62,6 +62,11 @@ python3 src/canvas.api.discussions_to_json.py COURSE_ID
 python3 src/canvas.api.to_json.py COURSE_ID
 python3 src/canvas.api.to_json.py COURSE_ID QUIZ_ID
 python3 src/canvas.api.json_to_all.py output/JSON output/SQLITE/quiz_archive.sqlite
+
+# Per-student quiz summary (score, time, word count, words/min)
+python3 src/canvas.api.quiz_summary.py COURSE_ID QUIZ_ID
+python3 src/canvas.api.quiz_summary.py COURSE_ID QUIZ_ID -v   # add per-question breakdown
+python3 src/canvas.api.quiz_summary.py COURSE_ID QUIZ_ID -vv  # add essay response text
 ```
 
 Without a profile config, pass `--base-url` and `--token-file` explicitly:
@@ -90,6 +95,29 @@ config file or CLI):
 | `canvas.api.list_discussions.py`        | COURSE_ID      | List discussion topics in a course               |
 | `canvas.api.discussions_to_json.py`     | COURSE_ID      | Download discussion threads to JSON              |
 | `canvas.api.to_json.py`                 | COURSE_ID         | Export quiz submissions to canonical JSON     |
+| `canvas.api.quiz_summary.py`            | COURSE_ID         | Per-student summary: score, time, words, wpm  |
+
+### Unified Wrappers
+
+Bash wrappers in `src/` dispatch to the underlying Python scripts:
+
+```bash
+# List commands
+canvas.api.list courses -y 2025 -s Spring
+canvas.api.list COURSE_ID quizzes
+canvas.api.list COURSE_ID assignments
+canvas.api.list COURSE_ID discussions
+
+# Download/export commands
+canvas.api.get COURSE_ID discussions [TOPIC_ID]
+canvas.api.get COURSE_ID assignments [ASSIGNMENT_ID]
+canvas.api.get COURSE_ID quizzes [QUIZ_ID] [--format csv|json|summary]
+```
+
+The `quizzes` noun supports `--format` (default: csv):
+- `csv` -- download Student/Item Analysis CSV reports (`report_to_csv.py`)
+- `json` -- export submissions to canonical JSON (`to_json.py`)
+- `summary` -- per-student summary with score, time, words, wpm (`quiz_summary.py`)
 
 **Offline scripts** (no API access needed):
 

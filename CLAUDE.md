@@ -47,6 +47,21 @@ All prefixed with `canvas.api.` for tab-completion. Run any with `--help`.
 | `canvas.api.list_discussions.py`        | COURSE_ID         | List discussion topics                           |
 | `canvas.api.discussions_to_json.py`     | COURSE_ID         | Download discussion threads to JSON              |
 | `canvas.api.to_json.py`                 | COURSE_ID         | Export quiz submissions to canonical JSON        |
+| `canvas.api.quiz_summary.py`            | COURSE_ID         | Per-student summary: score, time, words, wpm     |
+
+**Unified wrappers** (dispatch to underlying scripts):
+
+| Script              | Usage                                                 | Purpose                          |
+|---------------------|-------------------------------------------------------|----------------------------------|
+| `canvas.api.list`   | `canvas.api.list courses [-y YEAR] [-s SEMESTER]`     | List courses, quizzes, etc.      |
+|                     | `canvas.api.list COURSE_ID {quizzes\|assignments\|discussions}` |                        |
+| `canvas.api.get`    | `canvas.api.get COURSE_ID discussions [TOPIC_ID]`     | Download/export data             |
+|                     | `canvas.api.get COURSE_ID assignments [ASSIGNMENT_ID]` |                                 |
+|                     | `canvas.api.get COURSE_ID quizzes [QUIZ_ID] [--format FORMAT]` |                        |
+
+The `quizzes` noun on `canvas.api.get` supports `--format csv|json|summary`
+(default: csv). Maps to `report_to_csv.py`, `to_json.py`, and
+`quiz_summary.py` respectively.
 
 **Offline scripts** (no API access needed):
 
