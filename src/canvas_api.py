@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
 # Date: 2026-02-19
-# Version: 1.3.0
+# Version: 1.4.0
 # Purpose: Canvas API endpoint wrappers for Classic Quiz archival and
 #          QTI content migration imports.
 # Usage: Imported by CLI scripts.
@@ -220,6 +220,54 @@ def get_discussion_topic_view(base_url, token, course_id, topic_id,
         print(f"[GET] {url}")
     data, _headers = http_get_json(url, token)
     return data
+
+
+# ---- Pages ----
+
+def get_pages(base_url, token, course_id, verbose=False):
+    """GET all wiki pages in a course (title, url, front_page, published)."""
+    url = f"{base_url}/api/v1/courses/{course_id}/pages?per_page=100"
+    return paginated_get_all(url, token, verbose=verbose)
+
+
+def get_page(base_url, token, course_id, page_url, verbose=False):
+    """GET a single wiki page by its URL slug.  Returns full page dict."""
+    url = f"{base_url}/api/v1/courses/{course_id}/pages/{page_url}"
+    if verbose:
+        print(f"  [GET] {url}")
+    data, _ = http_get_json(url, token)
+    return data
+
+
+def update_page(base_url, token, course_id, page_url, body, verbose=False):
+    """PUT new HTML body to a wiki page.  Returns updated page dict."""
+    url = f"{base_url}/api/v1/courses/{course_id}/pages/{page_url}"
+    if verbose:
+        print(f"  [PUT] {url}")
+    data, _ = http_put_json(url, token, {"wiki_page": {"body": body}})
+    return data
+
+
+# ---- Files ----
+
+def get_file(base_url, token, course_id, file_id, verbose=False):
+    """GET a file's metadata including its download URL (contains verifier)."""
+    url = f"{base_url}/api/v1/courses/{course_id}/files/{file_id}"
+    if verbose:
+        print(f"  [GET] {url}")
+    data, _ = http_get_json(url, token)
+    return data
+
+
+def search_files(base_url, token, course_id, search_term, verbose=False):
+    """Search course files by filename or title.
+    Returns a list of file metadata dicts (may be empty).
+    """
+    import urllib.parse
+    q = urllib.parse.quote(search_term)
+    url = (f"{base_url}/api/v1/courses/{course_id}"
+           f"/files?search_term={q}&per_page=20")
+    return paginated_get_all(url, token, verbose=verbose)
 
 
 # ---- Content Migrations (QTI Import) ----
