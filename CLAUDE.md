@@ -128,6 +128,6 @@ or `--token <inline-token>`.
 ## Development
 
 - Python 3.7+, stdlib only (no pip dependencies)
-- All scripts run from the repo root: `python3 src/canvas.api.script.py ...`
-- CLI entrypoints should be executable (`chmod +x`)
+- All scripts run from the repo root: `src/canvas.api.script.py ...` (no `python3` prefix)
+- CLI entrypoints must be executable (`chmod +x`) and have `#!/usr/bin/env python3` shebang
 - Library modules are not executable
